@@ -1,0 +1,266 @@
+---
+title: "Project_1: How old the mussel is?"
+author: 
+date: "10/26/2020"
+output: html_document
+html_document:
+    toc: true
+    toc_depth: 3log(27, base = 3) * (sqrt(144) + 10)
+    toc_float: true
+    number_section: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(cowplot)
+theme_set(theme_bw())
+```
+
+# Prepearing Data
+
+Сombining all observations into a one table
+
+```{r merging files}
+
+merging_data = function(mypath){
+  filenames=list.files(path=mypath, full.names=TRUE)
+  datalist = lapply(filenames, function(x){read.csv(file=x,header=T)})
+  Reduce(function(x,y) {merge(x,y,all = TRUE)}, datalist)
+}
+
+mussels_all = merging_data(mypath)
+```
+
+Let's look at the data structure:
+
+```{r data structure}
+
+str(mussels_all)
+
+```
+
+You can see that not all variables are of the correct type: Rings should be numeric rather than character.
+Also, using the "unique" function, we can see that there are NA and other incorrectly entered values here.
+
+Fixing the Rings variables values:
+
+```{r Rings variables structure}
+
+mussels_all$Rings <- as.numeric(mussels_all$Rings)
+unique(mussels_all$Rings)
+
+```
+
+Fixing the Sex variables values. Let's change the name that is too long, and there are 3 levels here, NA, and misnamed parameters, we can find out the positions of the incorrectly named lines and rename them:
+
+```{r Sex variables structure}
+
+names(mussels_all)[2] <- "Sex"
+unique(mussels_all$Sex)
+
+match('male',mussels_all$Sex)
+mussels_all[1122, "Sex"] <- "1"
+
+match('one',mussels_all$Sex)
+mussels_all[4176, "Sex"] <- "1"
+
+match('three',mussels_all$Sex)
+mussels_all[3488, "Sex"] <- "3"
+
+unique(mussels_all$Sex)
+
+mussels_all$Sex <- factor(mussels_all$Sex, levels = c(1, 2, 3), labels = c("Male", "Female", "Uvenil"))
+
+```
+
+The Length variables:
+
+```{r Length variables structure}
+
+unique(mussels_all$Length)
+match('No data! I forgot to mesure it!(',mussels_all$Length)
+mussels_all[3487, "Length"] <- "NA"
+mussels_all$Length <- as.numeric(mussels_all$Length)
+
+```
+
+Now, let's see the structure of dataframe:
+
+```{r Dataframe structure}
+
+summary(mussels_all)
+
+```
+
+We can see, that there are some NA values, but there are not very many of them, so I think we can just delete them
+
+```{r NA removal}
+
+mussels <- na.omit(mussels_all)
+
+```
+
+Check the data again:
+
+```{r data check}
+
+summary(mussels)
+str(mussels)
+colSums(is.na(mussels))
+
+```
+
+# EDA analysis
+
+Now everything seems to be fine and we can go to EDA analysis:
+
+Firstly, we are going to visualize the variables for outliers
+
+```{r outliers check, echo = FALSE}
+
+library(ggplot2)
+library(cowplot)
+Rings_box <- ggplot(mussels, aes(x = factor(Sex), y = Rings))+
+     geom_boxplot()
+Length_box <- ggplot(mussels, aes(x = factor(Sex), y = Length))+
+  geom_boxplot()
+Diameter_box <- ggplot(mussels, aes(x = factor(Sex), y = Diameter))+
+  geom_boxplot()
+Height_box <- ggplot(mussels, aes(x = factor(Sex), y = Height))+
+  geom_boxplot()
+Whole_weight_box <- ggplot(mussels, aes(x = factor(Sex), y = Whole_weight))+
+  geom_boxplot()
+Shucked_weight_box <- ggplot(mussels, aes(x = factor(Sex), y = Shucked_weight))+
+  geom_boxplot()
+Viscera_weight_box <- ggplot(mussels, aes(x = factor(Sex), y = Viscera_weight))+
+  geom_boxplot()
+Shell_weight_box <- ggplot(mussels, aes(x = factor(Sex), y = Shell_weight))+
+  geom_boxplot()
+plot_grid(Rings_box, Length_box, Diameter_box, Height_box, Whole_weight_box, Shucked_weight_box, Viscera_weight_box, Shell_weight_box)
+
+```
+
+Next we should assess the presence of relationships between variables:
+
+```{r correlation check}
+pairs(mussels)
+mussels_numeric <- mussels[c(1,3:9)]
+cor(mussels_numeric)
+
+```
+
+## What hypotheses can be formulated?
+
+Ho: There is no relationship between age, mussel size and number of rings.
+Ha: There is a relationship between the number of rings and the size and age of the mussel.
+
+## Calculation the mean and standard deviation of the Length variable for molluscs of different sexes:
+
+```{r mean and SD}
+
+library(dplyr)
+MeanSD_Length <- cbind(aggregate(Length ~ Sex, mussels, mean), aggregate(Length ~ Sex, mussels, sd)) 
+MeanSD_Length
+
+```
+
+## Calculation for what percentage of molluscs the value of the Height variable does not exceed 0.165?
+
+```{r Smallest mussels}
+
+mussels_less_then165 <- mussels %>% filter(Height < 0.165)
+mussels_less_then165_in_percent <- length(mussels_less_then165$Height) / length(mussels$Height) * 100
+mussels_less_then165_in_percent
+
+```
+
+## Calculate what the Length variable is equal to, which is greater than 92% of all observations
+
+```{r Lengthest mussels}
+
+quantile(mussels$Length, 0.92)
+
+```
+
+## Length values after standardization:
+
+```{r Z scale}
+library(dplyr)
+mussels <- mussels %>% mutate(Lenght_z_scores = (Length - mean(Length)) / sd(Length))
+```
+
+## Comparison of the diameter of mussels with the number of rings 5 and 15
+
+```{r five and fifteen rings}
+
+library(dplyr)
+comparisson_btw_5_and_15_rings <- rbind(mussels %>% filter(Rings == 5), mussels %>% filter(Rings == 15))
+
+```
+
+## Check the data for normality. If the data distribution is normal, we can use the t-test to compare the diameter of mussels with 5 and 15 rings
+
+```{r five and fifteen rings2}
+
+shapiro.test(comparisson_btw_5_and_15_rings$Length[comparisson_btw_5_and_15_rings$Rings == 5])
+shapiro.test(comparisson_btw_5_and_15_rings$Length[comparisson_btw_5_and_15_rings$Rings == 15])
+
+
+diameter_ttest <- t.test(Diameter ~ Rings, comparisson_btw_5_and_15_rings)
+
+```
+
+Comparison results in the graph form:
+
+```{r five and fifteen rings3, echo = FALSE}
+
+ggplot(comparisson_btw_5_and_15_rings, aes(x = factor(Rings), y = Diameter))+
+  geom_boxplot() +
+  xlab(label = "Number of rings") + 
+  ylab(label = "Diameter")
+
+```
+
+Thus, the alternative hypothesis is correct, with an increase in the number of rings, the diameter of the mussel increases.
+
+## Estimating Diameter and Whole_weight variables
+
+Check the data for normality:
+
+```{r Diameter and Whole_Weight}
+
+shapiro.test(mussels$Diameter)
+shapiro.test(mussels$Whole_weight)
+
+cor.test(x = mussels$Diameter, y = mussels$Whole_weight, method = 'spearman')
+
+```
+
+The distribution data is not entirely linear, however, we see the relationship between the diameter and weight of the mussel
+
+```{r Diameter and Whole_Weight2, echo = FALSE}
+
+ggplot(mussels, aes(x = Diameter, y = Whole_weight, col = Sex))+
+  geom_point(alpha = 0.7, size = 2)
+
+```
+
+## Conclusion
+Thus, we see that the older the mussel, the more rings it has and the more pain it is in size and weight.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
