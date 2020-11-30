@@ -1,0 +1,342 @@
+---
+title: "Project_2"
+author: 
+date: "11/25/2020"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    number_section: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(MASS)
+library(car)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(cowplot)
+library(vegan)
+library(ggbiplot)
+theme_set(theme_bw())
+```
+
+## Project annotation
+
+The MASS package contains data on the value of housing in the city of Boston in the 1970s and 1980s (Boston dataframe). 
+
+Aim: to assess how the average cost of owner-occupied homes (medv, measured at $ 1,000) depends on various factors.
+
+*crim - per capita crime rate by town
+*zn - proportion of residential land zoned for lots over 25,000 sq.ft
+*indus - proportion of non-retail business acres per town
+*chas - Charles River dummy variable (= 1 if tract bounds river; 0 otherwise)
+*nox - nitric oxides concentration (parts per 10 million)
+*rm - average number of rooms per dwelling
+*age - proportion of owner-occupied units built prior to 1940
+*dis - weighted distances to five Boston employment centres
+*rad - index of accessibility to radial highways
+*tax - full-value property-tax rate per USD 10,000
+*ptratio - pupil-teacher ratio by town
+*black - proportion of blacks by town
+*lstat - percentage of lower status of the population
+*medv - median value of owner-occupied homes in USD 1000’s
+
+```{Performing the data}
+dataset <- Boston
+```
+First, we should do some exploratory analysis of our data:
+1) To check for NA in our data
+2) To see data structure
+3) To visualize outliers
+
+```{Checking for NA and missing values}
+colSums(is.na(dataset))
+NA_number <- length(which(is.na(dataset)==T))
+```
+
+```{See data structure}
+str(dataset)
+head(dataset)
+summary(dataset)
+plot(dataset) 
+```
+
+```{Visualization of outliers}
+long_dataset <- dataset %>% gather()
+head(long_dataset)
+
+theme_set(theme_bw())
+ggplot(long_dataset, aes(x = key, y = value))+
+  geom_boxplot()+
+  labs(x = "Variables", y = "Values")
+
+long_dataset <- dataset %>% gather() %>% group_by(key) %>% mutate(Scale_value = scale(value))
+
+ggplot(long_dataset, aes(x= key, y = Scale_value))+
+  geom_boxplot()+
+  labs(x = "Variables", "Standardized values ")
+
+#Cleveland charts
+gg_dot<- ggplot(dataset, aes(y = 1:nrow(dataset), x = black)) + geom_point() + ylab('index')
+Kl1 <- gg_dot + aes(x = age)
+Kl2 <- gg_dot + aes(x = black) 
+Kl3 <- gg_dot + aes(x = chas) 
+Kl4 <- gg_dot + aes(x = crim) 
+Kl5 <- gg_dot + aes(x = dis) 
+Kl6 <- gg_dot + aes(x = indus)
+Kl7 <- gg_dot + aes(x = lstat) 
+Kl8 <- gg_dot + aes(x = medv) 
+Kl9 <- gg_dot + aes(x = nox) 
+Kl10 <- gg_dot + aes(x = ptratio)
+Kl11 <- gg_dot + aes(x = rad) 
+Kl12 <- gg_dot + aes(x = rm) 
+Kl13 <- gg_dot + aes(x = tax)
+Kl14 <- gg_dot + aes(x = zn)
+theme_set(theme_bw())
+plot_grid(Kl1, Kl2, Kl3, Kl4, Kl5, Kl6, Kl7, Kl8, Kl9, Kl10, Kl11, 
+            Kl12, Kl13, Kl14, ncol = 3, nrow = 4)
+```
+
+The variable chas is a factor, so we will not include it in the model.
+
+Let's check how the dependent variable medv is distributed
+```{variable data}
+ggplot(dataset, aes(x=medv))+
+  geom_histogram(color = "black", fill = "pink")
+```
+
+Next, we will evaluate the nature of the relationship between the dependent variable and predictors
+```{the interaction between dependent var and predictors}
+gg_cor<- ggplot(dataset, aes(y = medv)) + geom_point() + geom_smooth(se = FALSE)
+C1 <-  gg_cor + aes(x= age)
+C2 <-  gg_cor + aes(x= black )
+C3 <-  gg_cor + aes(x= crim )
+C4 <-  gg_cor + aes(x= dis)
+C5 <-  gg_cor + aes(x=indus)
+C6 <-  gg_cor + aes(x=lstat)
+C7 <-  gg_cor + aes(x=nox)
+C8 <-  gg_cor + aes(x=ptratio)
+C9 <-  gg_cor + aes(x=rm)
+C10 <-  gg_cor + aes(x=tax)
+C11 <-  gg_cor + aes(x=zn)
+C12 <-  gg_cor + aes(x=rad)
+
+plot_grid(C1, C2, C3, C4, C5, C6, C7, C8, C9, C10, C11, C12, ncol = 4, nrow = 3)
+```
+The relationship between variables is not always linear. This is not very good for building a model
+
+```{Dependent var}
+ggplot(dataset, aes(x=medv))+
+  geom_histogram(color = "black", fill = "pink")
+```
+
+Let's try to build a complete model for our data
+```{Fullmodel}
+model_full <- lm(medv ~ ., data = dataset)
+summary(model_full)
+```
+Let's evaluate the quality of the built model by vif coefficients
+```{Full_vif_ model}
+vif(model_full)
+```
+The vif coefficient is very high, so let's try to remove the factor variable
+```{model}
+model <- lm(medv ~ ., data = predictors)
+
+factor_variable <- !colnames(dataset) %in% c("chas")
+predictors <- dataset[ ,factor_variable]
+
+summary(model)
+vif(model)
+
+x <- model.matrix(model)
+head(x)
+```
+
+Next, we analyze the resulting model
+Let's evaluate the quality of the built model by vif coefficients
+```{VIF}
+vif(model_full)
+```
+## Checking collinearity of predictors
+```{vif_predictors}
+vif(model)
+```
+Let's remove the predictors with the highest vif coefficient
+
+```{remove high vif}
+update_model <- update(model, ~ . -tax)
+vif(update_model)
+```
+## Analysis of residues
+```{Full modelvif}
+analysis_model <- fortify(update_model)
+head(analysis_model)
+```
+Using these values, you can start analyzing the model's validity.
+Using the Cook Distance Plot, we will evaluate if there are any influential variables
+```{Cook}
+ggplot(analysis_model, aes(x=1:nrow(analysis_model), y= .cooksd))+
+  geom_bar(stat = 'identity')+ coord_cartesian(ylim= c(0,2))+
+  geom_hline(yintercept = 1, linetype = 2)
+```
+For influential observations, the Cook distance is greater than one, everything is fine with us, nothing needs to be deleted
+The scatter plot of the residuals of the dependent variable versus the predicted values reflects the behavior of the standardized residuals in general.
+In our data, not all observations are in the +/- 2 standard deviation zone; heteroscedasticity (funnel-shaped pattern) is present.
+
+```{graph}
+gg_resid <- ggplot(data = analysis_model, aes(x = .fitted, y = .stdresid))+
+  geom_point()+ geom_hline(yintercept = 0)+ geom_smooth()+
+  geom_hline(yintercept = 2, color = "red") +
+  geom_hline(yintercept = -2, color = "red")
+gg_resid
+```
+Most likely this is due to the fact that we have outliers and there is heterogeneity of variance, which violates the conditions for constructing a linear model and reduces its quality.
+ 
+## Plot of residuals versus model predictors
+
+```{predictors}
+res1 <- gg_resid + aes(x = crim)
+res2 <- gg_resid + aes(x = zn)
+res3 <- gg_resid + aes(x = indus)
+res4 <- gg_resid + aes(x = rm)
+res5 <- gg_resid + aes(x = age)
+res6 <- gg_resid + aes(x = dis)
+res7 <- gg_resid + aes(x = nox)
+res8 <- gg_resid + aes(x = ptratio)
+res9 <- gg_resid + aes(x = black)
+res10 <- gg_resid + aes(x = lstat)
+res11 <- gg_resid + aes(x = rad)
+plot_grid(res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, ncol = 3, nrow = 4)
+```
+The graph shows the dependence of the standardized residuals on all predictors that were included in the model.
+
+Next, we will check if there are any deviations of the predictors from the normal distribution
+
+```{normality}
+qqPlot(update_model)
+```
+Let's evaluate the interaction of predictors. Comparison of the impact of individual predictors:
+
+```{interacton}
+summary(update_model)
+coef(update_model)
+```
+We cannot compare the coefficients without their standardization, the coefficients for standardized predictors will show how much the response changes when the predictor changes by 1 standard deviation
+
+```{scale_coef}
+scaled_model <- lm(medv ~ scale(crim) + scale(zn) + scale(indus) + scale(rm) + scale(age) + scale(dis) + scale(nox) + 
+                     scale(ptratio) + scale(black) + scale(lstat) + scale(rad), data = predictors)
+
+summary(scaled_model)
+coef(scaled_model)
+
+```
+
+## Assessment of the quality of the resulting model
+We obtained an almost complete linear regression model, however, the quality of this model leaves much to be desired, the most influential significant predictor is lstat - the percentage of the lowest status of the population. However, the data do not quite meet the requirements for the correct construction of linear regression and the coefficients that we apparently may not correspond to reality
+
+## Visualization of multiple regression model
+We will create a new dataframe in which the most influential lstat value will change, the rest of the predictors will take average values
+
+```{lm graph}
+new_data <- data.frame(lstat=seq(min(dataset$lstat), max(dataset$lstat), length.out = 100),
+                       crim = mean(dataset$crim),
+                       zn = mean(dataset$zn),
+                       indus = mean(dataset$indus),
+                       rm = mean(dataset$rm),
+                       age = mean(dataset$age),
+                       dis = mean(dataset$dis),
+                       nox = mean(dataset$nox),
+                       ptratio = mean(dataset$ptratio),
+                       black = mean(dataset$black),
+                       rad = mean(dataset$rad))
+
+
+new_data$predicted <- predict(update_model, newdata = new_data)
+head(new_data, 3)
+
+new_data$SE <- predict(update_model, newdata = new_data, se.fit = TRUE)$se.fit
+new_data$upper <- new_data$predicted + 2*new_data$SE
+new_data$lower <- new_data$predicted - 2*new_data$SE
+```
+```{lm_visualisation}
+qqPlot(update_model)ggplot(data = new_data, aes(x = lstat, y = predicted))+
+  geom_ribbon(data = new_data, aes(ymin= lower, ymax = upper), alpha = 0.3)+
+  geom_line(color = "blue", size = 1)+
+  geom_point(data = dataset, aes(x = lstat, y = medv))+
+  labs(y = "Median value of owner-occupied homes", x ="Percentage of lower status of the population")```
+```
+
+## Final full model (excluding chas)
+medv = 19,62 -0,06crim + 0,04zn - 0,096indus + 4,30rm -0,015age -1,28dis - 0,001tax -0,717ptratio + 0,009black - 0,54lstat
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Stage 2. Search for the optimal model.
+
+## Additional part (selection of the most influential predictors - which make the maximum contribution to the change in property prices)
+
+Since our predictor variables are multicollinear, let's try to apply PCA analysis
+```{PCA}
+medv_var <- !colnames(dataset) %in% c("medv")
+pca_dataset <- dataset[ ,medv_var]
+
+pca_dataset <- rda(pca_dataset, scale = TRUE)
+summary(pca_dataset)
+
+screeplot(pca_dataset, bstick = TRUE, type = 'lines')
+```
+Percentage of variability explained by each component
+
+```{Percent}
+eigenvals(pca_dataset) / sum(eigenvals(pca_dataset)) * 100
+```
+To assess the relationship of variables with components, let's look at factor loadings
+
+```{scores}
+scores(pca_dataset, display = 'species', choices = c(1, 2, 3), scaling = 'species', correlation = TRUE)
+```
+And let's look at them on the graph:
+
+```{scores_graph}
+biplot(pca_dataset, scaling = 'species', correlation = TRUE,
+       main = 'PCA - species scaling', display = 'species'))
+```
+Next, we test the predictors using the drop1 function, remove all insignificant predictors
+
+```{test}
+summary(update_model)
+drop1(update_model, test = "F")
+update_model2 <- update(update_model, ~ . -indus)
+drop1(update_model2, test = "F")
+final_model <- update(update_model2, ~ . -age)
+drop1(update_model3, test = "F")
+
+summary(final_model)
+
+
+```
+Let's compare the resulting models:
+```{update vs final}
+anova(update_model, final_model)
+```
+Let's compare the coefficients of the predictors in the new model:
+
+```{scale_coef}
+final_model_scalecoef <- lm(medv ~ scale(crim) + scale(zn) + scale(nox) + scale(rm) + scale(dis) + scale(rad) + scale(ptratio) + scale(black) + scale(lstat), data = dataset)
+
+summary(final_model_scalecoef)
+```
+## Conclusion
+
+We see that 'lstat' - percentage of lower status of the population remains the most significant predictor and it negatively affects the cost of owner-occupied homes, while the 'rm'-average number of rooms per dwelling indicator has the most positive effect.
+
+Therefore, based on the result of our model, we can conclude that then greater the percentage of the poor in the area of interest, the lower the cost of real estate in this area. Also, the price of real estate increases as the number of rooms in an apartment increases.
+
+
+
+
+
+
