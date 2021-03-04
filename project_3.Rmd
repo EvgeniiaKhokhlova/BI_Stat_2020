@@ -1,7 +1,9 @@
 ---
 title: "Project_3 Mice"
+output:
+  html_document: default
+  pdf_document: default
 date: "2/23/2021"
-output: html_document
 ---
 
 ```{r setup, include=FALSE}
@@ -13,7 +15,8 @@ library(dplyr)
 library(ggplot2)
 library(multcomp)
 library(car)
-library(pca3d)
+library(vegan)
+library(ggbiplot)
 ```
 
 # Dataset description
@@ -105,7 +108,7 @@ To find out which classes are differs on BDNF_N expression we can make a post-ho
 
 ```{r warning=FALSE}
 post_hoc_test <- glht(BDNF_N_full_model, linfct = mcp(class = "Tukey"))
-summary(post_hoch)
+summary(post_hoc_test)
 ```
 
 # Linear model for ERBB4_N
@@ -118,6 +121,7 @@ ggplot(data_without_NA, aes(ERBB4_N))+
 ```
 
 First of all, lets try to create the full linear model for ERBB4_N prediction:
+
 ```{r}
 full_model <- lm(ERBB4_N ~ DYRK1A_N + ITSN1_N + BDNF_N + NR1_N + NR2A_N + pAKT_N + pBRAF_N + pCAMKII_N + 
 pCREB_N + pELK_N + pERK_N + pJNK_N + PKCA_N + pMEK_N + pNR1_N + pNR2A_N + pNR2B_N + 
@@ -132,7 +136,7 @@ summary(full_model)
 ```
 
 Let's evaluate the quality of the built model by vif coefficients. 
-I have an error in "vif" function becouse of alised coefficients. To find out what predictors caused a problem, I apply a function "alias" and delete the culprit variable ARK_N.
+I have an error in "vif" function becouse of alised coefficients. To find out what predictors caused a problem, I apply a function "alias" and delete the variable ARK_N.
 
 ```{r echo=FALSE}
 alias(lm(ERBB4_N ~ DYRK1A_N + ITSN1_N + BDNF_N + NR1_N + NR2A_N + pAKT_N + pBRAF_N + pCAMKII_N + 
@@ -353,7 +357,8 @@ ggplot(analysis_model, aes(x=1:nrow(analysis_model), y= .cooksd))+
   geom_bar(stat = 'identity')+ coord_cartesian(ylim= c(0,2))+
   geom_hline(yintercept = 1, linetype = 2)
 ```
-There no values upper 2.0 so we can suppose there no influential observations.
+
+There are no values upper 2.0 so we can suppose there no influential observations.
 
 ```{r}
 gg_resid <- ggplot(data = analysis_model, aes(x = .fitted, y = .stdresid))+
@@ -362,7 +367,8 @@ gg_resid <- ggplot(data = analysis_model, aes(x = .fitted, y = .stdresid))+
   geom_hline(yintercept = -2, color = "red")
 gg_resid
 ```
-So we can see that there are heterogeneity of variance, which violates the conditions for constructing a linear model and reduces its quality. Also there are some values out of +/- 2 standard deviations, so the criterium of linearity is failed. Dispersion of residuals is failed too. 
+
+So we can see that there are heterogeneity of variance, which violates the conditions for constructing a linear model and reduces its quality. Also there are some values out of +/- 2 standard deviations, so the criterium of linearity is failed 
 
 Let's evaluate the interaction of predictors. Comparison of the impact of individual predictors:
 
@@ -371,56 +377,57 @@ summary(final_model)
 coef(final_model)
 ```
 
-Also we can delete not significant predictors from the model. For this step we can use "backward selection" and F-test:
+Also we can delete not significant predictors from the model. For this step we can use backward selection and F-test:
+
 ```{r}
-final_model_2 <- update(final_model, .~. - pCAMKII_N, -pNR1_N, - pRSK_N, - CREB_N, -SOD1_N, -pGSK3B_N, -CDK5_N, - BAX_N, -GluR3_N, -pGSK3B_Tyr216_N)
-summary(final_model_2)
+drop1(final_model, test = 'F')
+final_model_2 <- update(final_model, .~. -pCAMKII_N)
 ```
 ```{r}
 final_model_3 <- update(final_model_2, .~. -pNR1_N)
-summary(final_model_3)
+drop1(final_model_3, test = 'F')
 ```
 
 ```{r}
 final_model_4 <- update(final_model_3, .~. - pRSK_N)
-summary(final_model_4)
+drop1(final_model_4, test = 'F')
 ```
 ```{r}
 final_model_5 <- update(final_model_4, .~. - CREB_N)
-summary(final_model_5)
+drop1(final_model_5, test = 'F')
 ```
 
 ```{r}
 final_model_6 <- update(final_model_5, .~.-SOD1_N)
-summary(final_model_6)
+drop1(final_model_6, test = 'F')
 ```
 
 ```{r}
 final_model_7 <- update(final_model_6, .~.-pGSK3B_N)
-summary(final_model_7)
+drop1(final_model_7, test = 'F')
 ```
 ```{r}
 final_model_8 <- update(final_model_7, .~. - BAX_N)
-summary(final_model_8)
+drop1(final_model_8, test = 'F')
 ```
 ```{r}
 final_model_9 <- update(final_model_8, .~. -pGSK3B_Tyr216_N)
-summary(final_model_9)
+drop1(final_model_9, test = 'F')
 ```
 
 ```{r}
 final_model_10 <- update(final_model_9, .~. -GluR3_N)
-summary(final_model_10)
+drop1(final_model_10, test = 'F')
 ```
 ```{r}
 final_model_11 <- update(final_model_10, .~. -CDK5_N)
-summary(final_model_11)
+drop1(final_model_11, test = 'F')
 ```
 ```{r}
 final_model_12 <- update(final_model_11, .~. -APP_N)
-summary(final_model_12)
+drop1(final_model_12, test = 'F')
 ```
-Now, all remained predictors are significant (*p*-value < 0.05).
+Now, all remained predictors are significant (p-value < 0.05).
 
 Let's see at final model graph:
 
@@ -456,8 +463,11 @@ Percentage of variability explained by each component
 eigenvals(dataset_PCA) / sum(eigenvals(dataset_PCA)) * 100
 ```
 ```{r}
-scores(dataset_PCA, display = 'species', choices = c(1, 2, 3), scaling = 'species', correlation = TRUE)
+pcadata <- scores(dataset_PCA, display = 'species', choices = c(1, 2, 3), scaling = 'species', correlation = TRUE)
+as.data.frame(pcadata, row.names = NULL, optional = FALSE)
+
 ```
+
 And let's look at them on the graph:
 
 ```{r}
