@@ -1,0 +1,468 @@
+---
+title: "Project_3 Mice"
+date: "2/23/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+require("knitr")
+opts_knit$set(root.dir = "~/Desktop/Bioinf/R/project_3")
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(multcomp)
+library(car)
+library(pca3d)
+```
+
+# Dataset description
+
+```{r}
+data <- read_xls('Data_Cortex_Nuclear.xls', col_names = T)
+str(data)
+```
+There are 38 control mice and 34 trisomic mice (Down syndrome), for a total of 72 mice. In the experiments, 15 measurements were registered of each protein per sample/mouse. The dataset contains a total of 1080 measurements per protein. The eight classes of mice are described based on features such as genotype, behavior and treatment. 
+
+Classes: 
+c-CS-s: control mice, stimulated to learn, injected with saline (9 mice) 
+c-CS-m: control mice, stimulated to learn, injected with memantine (10 mice) 
+c-SC-s: control mice, not stimulated to learn, injected with saline (9 mice) 
+c-SC-m: control mice, not stimulated to learn, injected with memantine (10 mice) 
+
+t-CS-s: trisomy mice, stimulated to learn, injected with saline (7 mice) 
+t-CS-m: trisomy mice, stimulated to learn, injected with memantine (9 mice) 
+t-SC-s: trisomy mice, not stimulated to learn, injected with saline (9 mice) 
+t-SC-m: trisomy mice, not stimulated to learn, injected with memantine (9 mice)
+
+According to genotype, mice can be control or trisomic. According to behavior, some mice have been stimulated to learn (context-shock) and others have not (shock-context) and in order to assess the effect of the drug memantine in recovering the ability to learn in trisomic mice, some mice have been injected with the drug and others have not. 
+
+So we can see in the structure of dataset, some of variables are containing factor information about animals. We can change type 'str' to 'factor':
+
+```{r}
+data$Genotype <- as.factor(data$Genotype)
+data$Treatment <- as.factor(data$Treatment)
+data$Behavior <- as.factor(data$Behavior)
+data$class <- as.factor(data$class)
+
+str(data)
+```
+Looking at the numbers of experiments in each group, I wouldn't say that groups are balanced because of different number of samples in each of them.  
+
+Next, we assess the number of NA in our variables:
+
+```{r}
+NA_number <- apply(is.na(data), 2, sum)
+NA_number
+```
+
+We can obsereve many NA in some variables. In variables where are amount of NA is more than 200 (BAD_N, BCL2_N, EGR1_N, H3MeK4_N, H3AcK18_N, pCFOS_N) we could exclude them from our analysis, but probable we could try to replace all of them by mean. 
+
+```{r}
+
+data_without_NA<- mutate_if(data, is.numeric, ~replace(., is.na(.), mean(., na.rm = TRUE)))
+
+```
+
+#Differences in the level of BDNF_N production depending on the class in the experiment
+
+To compare the level of expression BDNF_N depending on the class we can use ANOVA test
+
+```{r}
+
+BDNF_N_vs_class <- data_without_NA[, c(1,4,82)]
+str(BDNF_N_vs_class)
+
+```
+
+But first, we should assess our data for normality:
+
+```{r echo=F}
+qqPlot(BDNF_N_vs_class$BDNF_N)
+shapiro.test(BDNF_N_vs_class$BDNF_N)
+```
+We can see that p-value in Shapiro-Wilk Test is below 0.05, the data significantly deviate from a normal distribution.
+
+```{r echo=FALSE, error = FALSE}
+ggplot(BDNF_N_vs_class, aes(class, BDNF_N)) + 
+  stat_summary(fun.data = "mean_cl_normal")+
+  ggtitle(label = "The level of BDNF_N production")
+```
+Create the linear model:
+```{r}
+BDNF_N_full_model <- lm(BDNF_N ~ class, data = BDNF_N_vs_class)
+summary(BDNF_N_full_model)
+```
+Due to our distribution is not normal we couldn't use ANOVA method, we can use non-parametric Kruskal-Wallis test 
+```{r}
+KW_test <- kruskal.test(BDNF_N ~ class, data = BDNF_N_vs_class)
+KW_test
+
+```
+We can see, that in Kruskal-Wallis test p-value is less than 0.05, so the there are significant difference between BDNF_N protein production between classes
+
+To find out which classes are differs on BDNF_N expression we can make a post-hoc test:
+
+```{r warning=FALSE}
+post_hoc_test <- glht(BDNF_N_full_model, linfct = mcp(class = "Tukey"))
+summary(post_hoch)
+```
+
+# Linear model for ERBB4_N
+
+Let's check how the dependent variable is distributed
+
+```{r}
+ggplot(data_without_NA, aes(ERBB4_N))+
+  geom_histogram(color = "black", fill = "white")
+```
+
+First of all, lets try to create the full linear model for ERBB4_N prediction:
+```{r}
+full_model <- lm(ERBB4_N ~ DYRK1A_N + ITSN1_N + BDNF_N + NR1_N + NR2A_N + pAKT_N + pBRAF_N + pCAMKII_N + 
+pCREB_N + pELK_N + pERK_N + pJNK_N + PKCA_N + pMEK_N + pNR1_N + pNR2A_N + pNR2B_N + 
+pPKCAB_N + pRSK_N + AKT_N + BRAF_N + CAMKII_N + CREB_N + ELK_N + ERK_N + GSK3B_N + 
+JNK_N + MEK_N + TRKA_N + RSK_N + APP_N + Bcatenin_N + SOD1_N + MTOR_N + P38_N + 
+pMTOR_N + DSCR1_N + AMPKA_N + NR2B_N + pNUMB_N + RAPTOR_N + TIAM1_N + pP70S6_N + 
+NUMB_N + P70S6_N + pGSK3B_N + pPKCG_N + CDK5_N + S6_N + ADARB1_N + AcetylH3K9_N + 
+RRP1_N + BAX_N + nNOS_N + Tau_N + GFAP_N + GluR3_N + GluR4_N + 
+IL1B_N + P3525_N + pCASP9_N + PSD95_N + SNCA_N + Ubiquitin_N + pGSK3B_Tyr216_N + 
+SHH_N + pS6_N + SYP_N + CaNA_N, data = data_without_NA)
+summary(full_model)
+```
+
+Let's evaluate the quality of the built model by vif coefficients. 
+I have an error in "vif" function becouse of alised coefficients. To find out what predictors caused a problem, I apply a function "alias" and delete the culprit variable ARK_N.
+
+```{r echo=FALSE}
+alias(lm(ERBB4_N ~ DYRK1A_N + ITSN1_N + BDNF_N + NR1_N + NR2A_N + pAKT_N + pBRAF_N + pCAMKII_N + 
+pCREB_N + pELK_N + pERK_N + pJNK_N + PKCA_N + pMEK_N + pNR1_N + pNR2A_N + pNR2B_N + 
+pPKCAB_N + pRSK_N + AKT_N + BRAF_N + CAMKII_N + CREB_N + ELK_N + ERK_N + GSK3B_N + 
+JNK_N + MEK_N + TRKA_N + RSK_N + APP_N + Bcatenin_N + SOD1_N + MTOR_N + P38_N + 
+pMTOR_N + DSCR1_N + AMPKA_N + NR2B_N + pNUMB_N + RAPTOR_N + TIAM1_N + pP70S6_N + 
+NUMB_N + P70S6_N + pGSK3B_N + pPKCG_N + CDK5_N + S6_N + ADARB1_N + AcetylH3K9_N + 
+RRP1_N + BAX_N + ARC_N + nNOS_N + Tau_N + GFAP_N + GluR3_N + GluR4_N + 
+IL1B_N + P3525_N + pCASP9_N + PSD95_N + SNCA_N + Ubiquitin_N + pGSK3B_Tyr216_N + 
+SHH_N + pS6_N + SYP_N + CaNA_N, data = data_without_NA))
+```
+
+## Checking collinearity of predictors
+
+```{r}
+vif(full_model)
+```
+Let's remove the predictors with the highest vif coefficient
+
+```{r}
+update_model_1 <- update(full_model, .~. - DYRK1A_N)
+vif(update_model_1)
+```
+```{r}
+update_model_2 <- update(update_model_1, .~. - ITSN1_N)
+vif(update_model_2)
+```
+```{r}
+update_model_3 <- update(update_model_2, .~. - NR1_N)
+vif(update_model_3)
+```
+```{r}
+update_model_4 <- update(update_model_3, .~. - Bcatenin_N)
+vif(update_model_4)
+```
+```{r}
+update_model_5 <- update(update_model_4, .~. - BRAF_N)
+vif(update_model_5)
+```
+
+```{r}
+update_model_6 <- update(update_model_5, .~. - GSK3B_N)
+vif(update_model_6)
+```
+```{r}
+update_model_7 <- update(update_model_6, .~. - NR2A_N)
+vif(update_model_7)
+```
+```{r}
+update_model_8 <- update(update_model_7, .~. - pNR2B_N)
+vif(update_model_8)
+```
+```{r}
+update_model_9 <- update(update_model_8, .~. - ERK_N)
+vif(update_model_9)
+```
+```{r}
+update_model_10 <- update(update_model_9, .~. - pPKCAB_N)
+vif(update_model_10)
+```
+```{r}
+update_model_11 <- update(update_model_10, .~. - RAPTOR_N)
+vif(update_model_11)
+```
+```{r}
+update_model_12 <- update(update_model_11, .~. - AMPKA_N)
+vif(update_model_12)
+```
+```{r}
+update_model_13 <- update(update_model_12, .~. - JNK_N)
+vif(update_model_13)
+```
+```{r}
+update_model_14 <- update(update_model_13, .~. - ELK_N)
+vif(update_model_14)
+```
+```{r}
+update_model_15 <- update(update_model_14, .~. - pJNK_N)
+vif(update_model_15)
+```
+
+```{r}
+update_model_16 <- update(update_model_15, .~. - AcetylH3K9_N)
+vif(update_model_16)
+```
+```{r}
+update_model_17 <- update(update_model_16, .~. - BDNF_N)
+vif(update_model_17)
+```
+```{r}
+update_model_18 <- update(update_model_17, .~. - pPKCG_N)
+vif(update_model_18)
+```
+```{r}
+update_model_19 <- update(update_model_18, .~. - pMEK_N)
+vif(update_model_19)
+```
+```{r}
+update_model_20 <- update(update_model_19, .~. - TRKA_N)
+vif(update_model_20)
+```
+
+```{r}
+update_model_21 <- update(update_model_20, .~. - MTOR_N)
+vif(update_model_21)
+```
+
+```{r}
+update_model_22 <- update(update_model_21, .~. - TIAM1_N)
+vif(update_model_22)
+```
+
+```{r}
+update_model_23 <- update(update_model_22, .~. - CAMKII_N )
+vif(update_model_23)
+```
+```{r}
+update_model_24 <- update(update_model_23, .~. - pNR2A_N)
+vif(update_model_24)
+```
+```{r}
+update_model_25 <- update(update_model_24, .~. - MTOR_N)
+vif(update_model_25)
+```
+```{r}
+update_model_26 <- update(update_model_25, .~. - pMTOR_N)
+vif(update_model_26)
+```
+```{r}
+update_model_27 <- update(update_model_26, .~. - RSK_N)
+vif(update_model_27)
+```
+```{r}
+update_model_28 <- update(update_model_27, .~. - PKCA_N)
+vif(update_model_28)
+```
+```{r}
+update_model_29 <- update(update_model_28, .~. - NUMB_N)
+vif(update_model_29)
+```
+```{r}
+update_model_30<- update(update_model_29, .~. - CaNA_N)
+vif(update_model_30)
+```
+
+```{r}
+update_model_31 <- update(update_model_30, .~. - NR2B_N)
+vif(update_model_31)
+```
+```{r}
+update_model_32 <- update(update_model_31, .~. - Ubiquitin_N)
+vif(update_model_32)
+```
+```{r}
+update_model_33 <- update(update_model_32, .~. - pBRAF_N)
+vif(update_model_33)
+```
+```{r}
+update_model_34 <- update(update_model_33, .~. - pNUMB_N)
+vif(update_model_34)
+```
+```{r}
+update_model_35 <- update(update_model_34, .~. - pAKT_N )
+vif(update_model_35)
+```
+```{r}
+
+update_model_36 <- update(update_model_35, .~. -  AKT_N)
+vif(update_model_36)
+```
+
+```{r}
+update_model_37 <- update(update_model_36, .~. - P38_N)
+vif(update_model_37)
+```
+```{r}
+update_model_38 <- update(update_model_37, .~. - IL1B_N)
+vif(update_model_38)
+```
+```{r}
+update_model_39 <- update(update_model_38, .~. - pCREB_N)
+vif(update_model_39)
+```
+
+```{r}
+update_model_40 <- update(update_model_39, .~. - pERK_N)
+vif(update_model_40)
+```
+```{r}
+update_model_41 <- update(update_model_40, .~. - MEK_N )
+vif(update_model_41)
+```
+```{r}
+update_model_42 <- update(update_model_41, .~. - S6_N )
+vif(update_model_42)
+```
+```{r}
+update_model_43 <- update(update_model_42, .~. - P70S6_N )
+vif(update_model_43)
+```
+```{r}
+final_model <- update(update_model_43, .~. -  pS6_N)
+vif(final_model)
+```
+
+##Analysis of residues
+```{r}
+analysis_model <- fortify(final_model)
+head(analysis_model)
+```
+Using these values, we can analyze the model's validity.
+
+Using the Cook Distance Plot, we will evaluate if there are any influential variables
+
+```{r}
+ggplot(analysis_model, aes(x=1:nrow(analysis_model), y= .cooksd))+
+  geom_bar(stat = 'identity')+ coord_cartesian(ylim= c(0,2))+
+  geom_hline(yintercept = 1, linetype = 2)
+```
+There no values upper 2.0 so we can suppose there no influential observations.
+
+```{r}
+gg_resid <- ggplot(data = analysis_model, aes(x = .fitted, y = .stdresid))+
+  geom_point()+ geom_hline(yintercept = 0)+ geom_smooth()+
+  geom_hline(yintercept = 2, color = "red") +
+  geom_hline(yintercept = -2, color = "red")
+gg_resid
+```
+So we can see that there are heterogeneity of variance, which violates the conditions for constructing a linear model and reduces its quality. Also there are some values out of +/- 2 standard deviations, so the criterium of linearity is failed. Dispersion of residuals is failed too. 
+
+Let's evaluate the interaction of predictors. Comparison of the impact of individual predictors:
+
+```{r}
+summary(final_model)
+coef(final_model)
+```
+
+Also we can delete not significant predictors from the model. For this step we can use "backward selection" and F-test:
+```{r}
+final_model_2 <- update(final_model, .~. - pCAMKII_N, -pNR1_N, - pRSK_N, - CREB_N, -SOD1_N, -pGSK3B_N, -CDK5_N, - BAX_N, -GluR3_N, -pGSK3B_Tyr216_N)
+summary(final_model_2)
+```
+```{r}
+final_model_3 <- update(final_model_2, .~. -pNR1_N)
+summary(final_model_3)
+```
+
+```{r}
+final_model_4 <- update(final_model_3, .~. - pRSK_N)
+summary(final_model_4)
+```
+```{r}
+final_model_5 <- update(final_model_4, .~. - CREB_N)
+summary(final_model_5)
+```
+
+```{r}
+final_model_6 <- update(final_model_5, .~.-SOD1_N)
+summary(final_model_6)
+```
+
+```{r}
+final_model_7 <- update(final_model_6, .~.-pGSK3B_N)
+summary(final_model_7)
+```
+```{r}
+final_model_8 <- update(final_model_7, .~. - BAX_N)
+summary(final_model_8)
+```
+```{r}
+final_model_9 <- update(final_model_8, .~. -pGSK3B_Tyr216_N)
+summary(final_model_9)
+```
+
+```{r}
+final_model_10 <- update(final_model_9, .~. -GluR3_N)
+summary(final_model_10)
+```
+```{r}
+final_model_11 <- update(final_model_10, .~. -CDK5_N)
+summary(final_model_11)
+```
+```{r}
+final_model_12 <- update(final_model_11, .~. -APP_N)
+summary(final_model_12)
+```
+Now, all remained predictors are significant (*p*-value < 0.05).
+
+Let's see at final model graph:
+
+```{r}
+gg_resid <- ggplot(data = final_model_12, aes(x = .fitted, y = .stdresid))+
+  geom_point()+ geom_hline(yintercept = 0)+ geom_smooth()+
+  geom_hline(yintercept = 2, color = "red") +
+  geom_hline(yintercept = -2, color = "red")
+gg_resid
+```
+
+Despite all, there are a lot of values out of +/- 2 standard deviations, so the linearity of our model remains failed. 
+I suppose, that this method isn't sutable for prediction ERBB4_N expression.
+
+##PCA 
+
+```{r}
+data_PCA <- data[, c(2:69, 72, 74, 78, 82)]
+number_NA <- apply(is.na(data_PCA), 1, sum)
+data_PCA_without_NA <- data_PCA[grep('0', number_NA),]
+dataset_PCA <- rda(data_PCA_without_NA[, 1:71], scale = TRUE)
+head(summary(dataset_PCA))
+```
+
+```{r echo=FALSE}
+biplot(dataset_PCA)
+screeplot(dataset_PCA, bstick = TRUE, type = 'lines')
+```
+
+Percentage of variability explained by each component
+
+```{R}
+eigenvals(dataset_PCA) / sum(eigenvals(dataset_PCA)) * 100
+```
+```{r}
+scores(dataset_PCA, display = 'species', choices = c(1, 2, 3), scaling = 'species', correlation = TRUE)
+```
+And let's look at them on the graph:
+
+```{r}
+biplot(dataset_PCA, scaling = 'species', correlation = TRUE,
+       main = 'PCA - species scaling', display = 'species')
+```
+
+
