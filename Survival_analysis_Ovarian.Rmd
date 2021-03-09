@@ -1,0 +1,188 @@
+---
+title: "Ovarian_dataset_survival_analysis"
+author:
+date: "3/9/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(survival)
+library(dplyr)
+library(data.table)
+library(ggplot2)
+library(knitr)
+library(survminer)
+library(ranger)
+library(ggfortify)
+library(coin)
+
+```
+
+Today we will analize Ovarian dataset with treatment of patients with advanced ovarian carcinoma (stages IIIB and IV) using either cyclophosphamide alone (1 g/m2) or cyclophosphamide (500 mg/m2) plus adriamycin (40 mg/m2) by iv injection every 3 weeks each produced partial regression in approximately one third of the patients.
+
+First, let's look at our data.
+
+##EDA analysis
+
+Importing dataset and seeng the structure:
+
+```{r}
+data("ovarian")
+ovarian <- data.frame(ovarian)
+str(ovarian)
+help(ovarian)
+
+```
+futime:	survival or censoring time
+fustat:	censoring status
+age:	in years
+resid.ds:	residual disease present (1=no,2=yes)
+rx:	treatment group
+ecog.ps:	ECOG performance status (1 is better, see reference) 
+
+We can see some factor variables, so we can change the data type for them:
+
+```{r}
+ovarian$rx <- factor(ovarian$rx)
+
+ovarian$resid.ds <- factor(ovarian$resid.ds)
+
+ovarian$ecog.ps <- factor(ovarian$ecog.ps)
+```
+
+And let's evaluate the distribution of our numeric variables:
+```{r}
+hist(ovarian$age) 
+hist(ovarian$futime) 
+```
+
+
+```{r}
+ovarian <- ovarian %>% mutate(age_group = ifelse(age >=50, "old", "young"))
+
+ovarian$age_group <- factor(ovarian$age_group)
+```
+
+Check our data for NA: 
+
+```{r}
+number_NA <- sum(is.na(ovarian))
+number_NA
+```
+We don't have any problems with our data^ so we can start the survival analysis
+
+## Kaplan-Meier curves
+
+It helps to estimate the probability of death of a particular individual depending on the time. First, we need to get the survival timeline (the time interval within which we will assess the survival rate).
+
+```{r}
+km <- with(ovarian, Surv(futime, fustat))
+head(km, 26)
+```
+
+Next, we build a linear model that accounts for the factor-based change in survival over time.
+
+```{r}
+km_fit <- survfit(Surv(futime, fustat) ~ 1, data=ovarian)
+summary(km_fit, times = c(1,30,60,90*(1:10)))
+
+autoplot(km_fit)
+```
+We see that in 50% of cases there is a complete recovery.
+
+Let's take a look at how the type of treatment affects survival.
+
+```{r}
+km_trt_fit <- survfit(Surv(futime, fustat) ~ rx, data=ovarian)
+autoplot(km_trt_fit)
+```
+We see that treatment A(1) has less effect than treatment B(2).
+
+We divide patients by age, into those who are under 50 and over 50. It can be seen that the probability of living more than a year in patients under 50 years of age is much higher (over 80%) than in older patients.
+
+```{r}
+vet <- mutate(ovarian, age_group = ifelse((age < 50), "LT50", "OV50"),
+              AG = factor(age_group),
+              trt = factor(rx,labels=c("A","B")))
+            
+
+km_AG_fit <- survfit(Surv(futime, fustat) ~ age_group, data=vet)
+autoplot(km_AG_fit)
+```
+
+Next, we evaluated how the incidence rate of people who remained ill and who were completely cured was changing. It is logical that we see that in people who no longer have the disease, the survival graph looks better.
+
+```{r}
+km_resid_fit <- survfit(Surv(futime, fustat) ~ resid.ds, data=ovarian)
+autoplot(km_resid_fit)
+``` 
+We see that only 40% of the patience have residual disease.
+
+When comparing the two treatment options, we see that the second treatment (cyclophosphamide (500 mg/m2) plus adriamycin (40 mg/m2)) option was more effective than the first (cyclophosphamide alone (1 g/m2).
+
+```{r}
+km_rx_fit <- survfit(Surv(futime, fustat) ~ rx, data=ovarian)
+autoplot(km_rx_fit)
+``` 
+
+Next we evaluate ECOG parametrs, these scales and criteria are used by doctors and researchers to assess how a patient's disease is progressing, assess how the disease affects the daily living abilities of the patient, and determine appropriate treatment and prognosis. We can approve^ that group 1 is better then group 2.
+
+```{r}
+km_ecog_fit <- survfit(Surv(futime, fustat) ~ ecog.ps, data=ovarian)
+autoplot(km_ecog_fit)
+``` 
+
+## Assess the factors that influence the risk and assess the risk ratio
+
+Another method for assessing survival is the log-rank test. It allows you to compare whether there is a difference in survival between groups.
+
+```{r, message= FALSE}
+cox <- coxph(Surv(futime, fustat) ~ age + resid.ds + rx + ecog.ps , data = ovarian)
+summary(cox)
+
+cox_fit <- survfit(cox)
+autoplot(cox_fit)
+```
+We see that this survival model is significantly influenced only by the patient's age.
+
+```{r, message=FALSE}
+aa_fit <- aareg(Surv(futime, fustat) ~ age + resid.ds + rx + ecog.ps, data = ovarian)
+autoplot(aa_fit)
+```
+
+## Hazard Ratio
+
+```{r}
+fit.coxph <- coxph(Surv(futime, fustat) ~ age + resid.ds + rx + ecog.ps, data = ovarian)
+ggforest(fit.coxph, data = ovarian)
+```
+On this Hazard ratio graph, we see that the age variable has a significant effect on survival rates. And with increasing parameters greater than 2, the risk of illness/death will also increase. If the hazard ratio is > 1, it indicates that the treatment group has a shorter survival than the control referenced group, and if it is < 1, it indicates that the group of interest is less likely to have a shorter time to the event than the reference group.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
